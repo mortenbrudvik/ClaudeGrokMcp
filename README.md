@@ -1,0 +1,239 @@
+# Grok MCP Plugin
+
+A Claude Code plugin that integrates xAI's Grok models for multi-model collaboration.
+
+## Features
+
+- **Natural language triggers**: "Ask Grok...", "What does Grok think..."
+- **Direct command**: `/grok <query>` for quick queries
+- **Model selection**: Choose from fast, smartest, code-optimized, or reasoning models
+- **Cost tracking**: See token usage and cost estimates for every query
+- **Response caching**: Reduce costs with intelligent caching
+
+## Installation
+
+### Prerequisites
+
+1. **xAI API Key**: Get one from [console.x.ai](https://console.x.ai/)
+2. **Claude Code**: Version with plugin support
+
+### Install from GitHub
+
+```bash
+# Add the plugin marketplace
+/plugin marketplace add your-username/grok-mcp
+
+# Install the plugin
+/plugin install grok-mcp@grok-mcp-dev
+
+# Restart Claude Code
+```
+
+### Set API Key
+
+Add to your environment or Claude Code settings:
+
+```bash
+export XAI_API_KEY=xai-your-key-here
+```
+
+Or configure in Claude Code:
+```bash
+/config set PLUGIN_ENV_XAI_API_KEY=xai-your-key-here
+```
+
+## Usage
+
+### Natural Language
+
+Just ask Claude to use Grok:
+
+```
+"Ask Grok what the best practices are for error handling in TypeScript"
+
+"Have Grok analyze this function for bugs"
+
+"What does Grok think about this architecture?"
+```
+
+### /grok Command
+
+```bash
+# Simple query
+/grok What is the time complexity of merge sort?
+
+# Specify model
+/grok --model fast Explain what a mutex is
+
+# Code analysis
+/grok --model code Review this function: function add(a,b) { return a-b }
+
+# Extended reasoning
+/grok --model reasoning Think through microservices vs monolith trade-offs
+```
+
+### Model Aliases
+
+| Alias | Model | Best For | Pricing (per 1M tokens) |
+|-------|-------|----------|------------------------|
+| `auto` | grok-4 | General queries | $3.00 / $15.00 |
+| `fast` | grok-4-fast | Quick responses | $0.20 / $0.50 |
+| `smartest` | grok-4 | Complex analysis | $3.00 / $15.00 |
+| `code` | grok-code-fast-1 | Programming tasks | $0.20 / $1.50 |
+| `reasoning` | grok-4.1-fast | Multi-step thinking | $0.20 / $0.50 |
+| `cheap` | grok-4-fast | Budget-conscious | $0.20 / $0.50 |
+
+## MCP Tools
+
+### grok_query
+
+Query Grok with a question or prompt.
+
+```typescript
+{
+  query: string,        // Required: The question to ask
+  model?: string,       // Model alias or ID (default: "auto")
+  context?: string,     // System context to guide response
+  max_tokens?: number,  // Max response tokens (default: 4096)
+  temperature?: number  // Sampling temperature 0-2 (default: 0.7)
+}
+```
+
+### grok_models
+
+List available models with capabilities and pricing.
+
+```typescript
+{
+  refresh?: boolean  // Force refresh from API (default: false)
+}
+```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `XAI_API_KEY` | Required | Your xAI API key |
+| `XAI_BASE_URL` | `https://api.x.ai/v1` | API base URL |
+| `XAI_TIMEOUT` | `30000` | Request timeout in ms |
+| `GROK_CACHE_ENABLED` | `true` | Enable response caching |
+| `GROK_COST_LIMIT_USD` | `10` | Session cost limit |
+| `GROK_API_TIER` | `standard` | API tier (standard/enterprise) |
+
+### Rate Limits
+
+| Tier | Tokens/Minute | Requests/Minute |
+|------|---------------|-----------------|
+| Standard | 500,000 | 500 |
+| Enterprise | 10,000,000 | 10,000 |
+
+## Response Format
+
+Every query returns:
+
+```
+[Grok's response]
+
+---
+Model: grok-4-fast
+Tokens: 150 in / 342 out (492 total)
+Cost: $0.0002
+Response time: 1234ms
+```
+
+## Examples
+
+### Code Review
+
+```
+/grok --model code Review this function:
+
+function fibonacci(n) {
+  if (n <= 1) return n;
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+```
+
+### Architecture Discussion
+
+```
+Ask Grok to analyze the trade-offs between using Redis vs Memcached for session storage
+```
+
+### Multi-Model Collaboration
+
+```
+I want both your perspective and Grok's on whether to use TypeScript strict mode
+```
+
+## Development
+
+### Build
+
+```bash
+cd mcp
+npm install
+npm run build
+```
+
+### Project Structure
+
+```
+grok-mcp/
+├── .claude-plugin/
+│   ├── plugin.json        # Plugin manifest
+│   └── marketplace.json   # Dev marketplace
+├── skills/
+│   └── using-grok/
+│       └── SKILL.md       # Natural language skill
+├── commands/
+│   └── grok.md            # /grok command
+├── mcp/
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       ├── index.ts       # MCP server entry
+│       ├── client/
+│       │   └── xai-client.ts
+│       ├── tools/
+│       │   ├── query.ts   # grok_query tool
+│       │   └── models.ts  # grok_models tool
+│       └── types/
+│           └── index.ts
+└── README.md
+```
+
+## Troubleshooting
+
+### "XAI_API_KEY is required"
+
+Set your API key:
+```bash
+export XAI_API_KEY=xai-your-key-here
+```
+
+### "Rate limit exceeded"
+
+The plugin automatically retries with exponential backoff. For heavy usage, consider enterprise tier.
+
+### "Model not found"
+
+Use `grok_models` to see current available models. Model IDs change periodically.
+
+### Plugin not loading
+
+1. Verify installation: `/plugin list`
+2. Check MCP status: `/mcp`
+3. Restart Claude Code
+
+## License
+
+MIT
+
+## Links
+
+- [xAI API Documentation](https://docs.x.ai/)
+- [xAI Console](https://console.x.ai/)
+- [MCP Specification](https://modelcontextprotocol.io/)

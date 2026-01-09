@@ -1,0 +1,18 @@
+{
+  "name": "grok-mcp-dev",
+  "description": "Development marketplace for grok-mcp plugin",
+  "owner": {
+    "name": "Morten"
+  },
+  "plugins": [
+    {
+      "name": "grok-mcp",
+      "description": "Integrate xAI's Grok models into Claude Code for multi-model collaboration",
+      "version": "1.0.0",
+      "source": "./",
+      "author": {
+        "name": "Morten"
+      }
+    }
+  ]
+}

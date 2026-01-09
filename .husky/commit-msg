@@ -1,0 +1,6 @@
+#!/bin/sh
+
+cd mcp
+
+# Run commitlint to validate commit message format
+npx --no -- commitlint --edit "$1"

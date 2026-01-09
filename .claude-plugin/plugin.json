@@ -1,0 +1,24 @@
+{
+  "name": "grok-mcp",
+  "version": "1.0.0",
+  "description": "Integrate xAI's Grok models into Claude Code for multi-model collaboration",
+  "author": {
+    "name": "Morten"
+  },
+  "license": "MIT",
+  "keywords": ["grok", "xai", "mcp", "multi-model", "ai", "llm"],
+  "repository": "https://github.com/mortense/grok-mcp",
+  "mcpServers": {
+    "grok": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/dist/index.js"],
+      "env": {
+        "XAI_API_KEY": "${PLUGIN_ENV_XAI_API_KEY}",
+        "GROK_CACHE_ENABLED": "${PLUGIN_ENV_GROK_CACHE_ENABLED:-true}",
+        "GROK_CACHE_TTL_SECONDS": "${PLUGIN_ENV_GROK_CACHE_TTL_SECONDS:-300}",
+        "GROK_COST_LIMIT_USD": "${PLUGIN_ENV_GROK_COST_LIMIT_USD:-10}",
+        "GROK_API_TIER": "${PLUGIN_ENV_GROK_API_TIER:-standard}"
+      }
+    }
+  }
+}
