@@ -20,7 +20,7 @@ Query xAI's Grok models directly from the command line.
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--model` | `-m` | Model to use (default: auto). Options: auto, fast, smartest, code, reasoning, cheap |
+| `--model` | `-m` | Model to use (default: auto). Options: auto, fast, smartest, code, reasoning, cheap, vision |
 | `--temperature` | `-t` | Sampling temperature 0-2 (default: 0.7) |
 | `--help` | `-h` | Show help message |
 
@@ -59,8 +59,9 @@ Query xAI's Grok models directly from the command line.
 | `fast` | Speed optimized (grok-4-fast) | Quick responses |
 | `smartest` | Best quality (grok-4) | Complex analysis |
 | `code` | Code optimized (grok-code-fast-1) | Programming tasks |
-| `reasoning` | Extended thinking (grok-4.1-fast) | Multi-step reasoning |
+| `reasoning` | Extended thinking (grok-4-1-fast-reasoning) | Multi-step reasoning |
 | `cheap` | Most cost-effective (grok-4-fast) | Budget-conscious |
+| `vision` | Image analysis (grok-4) | Vision/image tasks |
 
 ## Response Format
 
@@ -74,7 +75,13 @@ The response includes:
 ## Related
 
 - `grok_query` tool - Programmatic access with full parameters
+- `grok_analyze_code` tool - Specialized code analysis
+- `grok_reason` tool - Extended reasoning for complex problems
+- `grok_execute_code` tool - Server-side Python execution
+- `grok_search_x` tool - Search X/Twitter and web
+- `grok_with_file` tool - Query with file content as context
 - `grok_models` tool - List available models and pricing
+- `grok_status` tool - Plugin status and rate limits
 - Using Grok skill - Natural language integration
 
 ## Instructions

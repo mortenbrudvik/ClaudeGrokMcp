@@ -80,22 +80,113 @@ Just ask Claude to use Grok:
 | `fast` | grok-4-fast | Quick responses | $0.20 / $0.50 |
 | `smartest` | grok-4 | Complex analysis | $3.00 / $15.00 |
 | `code` | grok-code-fast-1 | Programming tasks | $0.20 / $1.50 |
-| `reasoning` | grok-4.1-fast | Multi-step thinking | $0.20 / $0.50 |
+| `reasoning` | grok-4-1-fast-reasoning | Multi-step thinking (2M context) | $0.20 / $0.50 |
 | `cheap` | grok-4-fast | Budget-conscious | $0.20 / $0.50 |
+| `vision` | grok-4 | Image/vision analysis | $3.00 / $15.00 |
 
 ## MCP Tools
 
 ### grok_query
 
-Query Grok with a question or prompt.
+Query Grok with a question or prompt. Supports vision/image analysis.
 
 ```typescript
 {
-  query: string,        // Required: The question to ask
-  model?: string,       // Model alias or ID (default: "auto")
-  context?: string,     // System context to guide response
-  max_tokens?: number,  // Max response tokens (default: 4096)
-  temperature?: number  // Sampling temperature 0-2 (default: 0.7)
+  query: string,           // Required: The question to ask
+  model?: string,          // Model alias or ID (default: "auto")
+  context?: string,        // System context to guide response
+  max_tokens?: number,     // Max response tokens (default: 4096)
+  temperature?: number,    // Sampling temperature 0-2 (default: 0.7)
+  image_url?: string,      // Image URL or base64 data URI for vision
+  image_detail?: string    // Detail level: "auto", "low", "high"
+}
+```
+
+### grok_analyze_code
+
+Analyze code for bugs, performance issues, security vulnerabilities, and style problems.
+
+```typescript
+{
+  code: string,            // Required: The code to analyze
+  language?: string,       // Programming language (auto-detected)
+  analysis_type?: string,  // "performance", "bugs", "security", "style", "all"
+  context?: string,        // Additional context about the code
+  model?: string           // Model to use (default: grok-code-fast-1)
+}
+```
+
+### grok_reason
+
+Perform extended reasoning and deep thinking on complex problems.
+
+```typescript
+{
+  query: string,           // Required: The problem to reason through
+  effort?: string,         // "low", "medium", "high" (default: "medium")
+  show_thinking?: boolean, // Include reasoning trace (default: true)
+  context?: string,        // Additional context
+  model?: string           // Model to use (default: grok-4-1-fast-reasoning)
+}
+```
+
+### grok_estimate_cost
+
+Estimate the cost of a Grok query before execution.
+
+```typescript
+{
+  query: string,           // Required: The query to estimate
+  model?: string,          // Model to use (default: auto)
+  context?: string,        // Additional context
+  max_tokens?: number      // Expected output tokens
+}
+```
+
+### grok_execute_code
+
+Execute Python code server-side for calculations and testing.
+
+```typescript
+{
+  code: string,            // Required: Python code to execute
+  description?: string,    // What the code should accomplish
+  include_output?: boolean,// Include stdout/stderr (default: true)
+  max_turns?: number,      // Max iterations 1-10 (default: 3)
+  model?: string           // Model to use (default: grok-4-1-fast)
+}
+```
+
+### grok_search_x
+
+Search X/Twitter and web using Grok agentic search.
+
+```typescript
+{
+  query: string,              // Required: Search query
+  enable_x_search?: boolean,  // Search X/Twitter (default: true)
+  enable_web_search?: boolean,// Search web (default: false)
+  x_handles?: string[],       // Filter by X handles
+  from_date?: string,         // Start date filter
+  to_date?: string,           // End date filter
+  include_citations?: boolean // Include source citations (default: true)
+}
+```
+
+### grok_with_file
+
+Query Grok with file content as context.
+
+```typescript
+{
+  query: string,           // Required: Question about the file
+  file_content: string,    // Required: File content as text
+  filename?: string,       // Original filename for format detection
+  file_type?: string,      // "code", "text", "markdown", "json", "csv", "xml", "yaml"
+  context?: string,        // Additional context
+  model?: string,          // Model to use
+  max_tokens?: number,     // Max response tokens (default: 4096)
+  temperature?: number     // Sampling temperature (default: 0.7)
 }
 ```
 
@@ -106,6 +197,16 @@ List available models with capabilities and pricing.
 ```typescript
 {
   refresh?: boolean  // Force refresh from API (default: false)
+}
+```
+
+### grok_status
+
+Get current status of the Grok MCP plugin.
+
+```typescript
+{
+  include_details?: boolean  // Include detailed breakdown (default: false)
 }
 ```
 

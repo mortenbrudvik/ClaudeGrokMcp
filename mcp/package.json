@@ -1,7 +1,7 @@
 {
   "name": "grok-mcp-server",
   "version": "2.0.0",
-  "description": "MCP server for xAI Grok integration with Claude Code",
+  "description": "MCP server for xAI Grok integration with Claude Code. Provides code analysis, extended reasoning, vision support, X/Twitter search, Python execution, and cost tracking.",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -38,7 +38,15 @@
     "mcp",
     "grok",
     "xai",
-    "claude"
+    "claude",
+    "code-analysis",
+    "reasoning",
+    "vision",
+    "twitter",
+    "x-search",
+    "multi-model",
+    "ai",
+    "llm"
   ],
   "author": "Morten",
   "license": "MIT",
