@@ -16,7 +16,7 @@ import {
 // Create a test client
 const createTestClient = (): XAIClient =>
   new XAIClient({
-    apiKey: 'test-api-key',
+    apiKey: 'xai-test-api-key-12345678',
     baseUrl: 'https://api.x.ai/v1',
     timeout: 5000,
   });
@@ -270,7 +270,7 @@ describe('grok_models tool', () => {
       const result = await handleGrokModels(client, {});
       const text = result.content[0].text;
 
-      expect(text).toContain('## Available Grok Models');
+      expect(text).toContain('🤖 **Grok Models:**');
       expect(text).toContain('| Model | Context | Pricing (per 1M) | Status |');
     });
 
@@ -278,10 +278,10 @@ describe('grok_models tool', () => {
       const result = await handleGrokModels(client, {});
       const text = result.content[0].text;
 
-      expect(text).toContain('### Recommended Models');
-      expect(text).toContain('**General tasks**');
-      expect(text).toContain('**Fast/cheap**');
-      expect(text).toContain('**Code generation**');
+      expect(text).toContain('### Recommended');
+      expect(text).toContain('**General**');
+      expect(text).toContain('**Fast**');
+      expect(text).toContain('**Code**');
       expect(text).toContain('**Reasoning**');
     });
 
@@ -289,7 +289,7 @@ describe('grok_models tool', () => {
       const result = await handleGrokModels(client, {});
       const text = result.content[0].text;
 
-      expect(text).toContain('### Model Aliases');
+      expect(text).toContain('### Aliases');
       expect(text).toContain('| Alias | Resolves To |');
       expect(text).toContain('| auto |');
       expect(text).toContain('| fast |');
@@ -299,7 +299,8 @@ describe('grok_models tool', () => {
       const result = await handleGrokModels(client, { refresh: true });
       const text = result.content[0].text;
 
-      expect(text).toContain('Cached:');
+      expect(text).toContain('⚡');
+      expect(text).toMatch(/live|cached/);
     });
 
     it('should format context windows correctly', async () => {
@@ -350,13 +351,13 @@ describe('grok_models tool', () => {
     it('should accept null input', async () => {
       const result = await handleGrokModels(client, null);
 
-      expect(result.content[0].text).toContain('## Available Grok Models');
+      expect(result.content[0].text).toContain('🤖 **Grok Models:**');
     });
 
     it('should accept undefined input', async () => {
       const result = await handleGrokModels(client, undefined);
 
-      expect(result.content[0].text).toContain('## Available Grok Models');
+      expect(result.content[0].text).toContain('🤖 **Grok Models:**');
     });
   });
 });

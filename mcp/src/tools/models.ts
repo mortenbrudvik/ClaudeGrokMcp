@@ -257,28 +257,27 @@ export async function handleGrokModels(
     const result = await executeGrokModels(client, input);
 
     // Format response as markdown
+    const cachedStatus = result.cached ? 'cached' : 'live';
     const lines: string[] = [
-      '## Available Grok Models',
+      '🤖 **Grok Models:**',
       '',
       '| Model | Context | Pricing (per 1M) | Status |',
       '|-------|---------|------------------|--------|',
       ...result.models.map(formatModelRow),
       '',
-      '### Recommended Models',
+      '### Recommended',
       '',
-      `- **General tasks**: \`${result.recommended.general}\``,
-      `- **Fast/cheap**: \`${result.recommended.fast}\``,
-      `- **Code generation**: \`${result.recommended.code}\``,
-      `- **Reasoning**: \`${result.recommended.reasoning}\``,
+      `- **General**: \`${result.recommended.general}\` | **Fast**: \`${result.recommended.fast}\``,
+      `- **Code**: \`${result.recommended.code}\` | **Reasoning**: \`${result.recommended.reasoning}\``,
       '',
-      '### Model Aliases',
+      '### Aliases',
       '',
       '| Alias | Resolves To |',
       '|-------|-------------|',
       ...Object.entries(MODEL_ALIASES).map(([alias, id]) => `| ${alias} | ${id} |`),
       '',
       '---',
-      `Cached: ${result.cached ? 'Yes' : 'No'}${result.cache_expires_at ? ` (expires: ${result.cache_expires_at})` : ''}`,
+      `⚡ *${result.models.length} models • ${cachedStatus}${result.cache_expires_at ? ` • expires: ${result.cache_expires_at}` : ''}*`,
     ];
 
     return {

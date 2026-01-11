@@ -1,6 +1,6 @@
 {
   "name": "grok-mcp-server",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "MCP server for xAI Grok integration with Claude Code",
   "type": "module",
   "main": "dist/index.js",
@@ -16,6 +16,8 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:ci": "vitest run --coverage --reporter=junit --outputFile=test-results.xml",
+    "test:live": "vitest run --config vitest.live.config.ts --passWithNoTests",
+    "test:live:watch": "vitest --config vitest.live.config.ts",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/",
