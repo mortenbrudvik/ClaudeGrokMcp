@@ -20,8 +20,9 @@ Query xAI's Grok models directly from the command line.
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--model` | `-m` | Model to use (default: auto). Options: auto, fast, smartest, code, reasoning, cheap, vision |
+| `--model` | `-m` | Model to use (default: auto). Options: auto, fast, smartest, code, reasoning, cheap |
 | `--temperature` | `-t` | Sampling temperature 0-2 (default: 0.7) |
+| `--top_p` | `-p` | Nucleus sampling 0-1 (alternative to temperature) |
 | `--help` | `-h` | Show help message |
 
 ## Examples
@@ -59,9 +60,8 @@ Query xAI's Grok models directly from the command line.
 | `fast` | Speed optimized (grok-4-fast) | Quick responses |
 | `smartest` | Best quality (grok-4) | Complex analysis |
 | `code` | Code optimized (grok-code-fast-1) | Programming tasks |
-| `reasoning` | Extended thinking (grok-4-1-fast-reasoning) | Multi-step reasoning |
+| `reasoning` | Extended thinking (grok-4.1-fast) | Multi-step reasoning |
 | `cheap` | Most cost-effective (grok-4-fast) | Budget-conscious |
-| `vision` | Image analysis (grok-4) | Vision/image tasks |
 
 ## Response Format
 
@@ -75,13 +75,7 @@ The response includes:
 ## Related
 
 - `grok_query` tool - Programmatic access with full parameters
-- `grok_analyze_code` tool - Specialized code analysis
-- `grok_reason` tool - Extended reasoning for complex problems
-- `grok_execute_code` tool - Server-side Python execution
-- `grok_search_x` tool - Search X/Twitter and web
-- `grok_with_file` tool - Query with file content as context
 - `grok_models` tool - List available models and pricing
-- `grok_status` tool - Plugin status and rate limits
 - Using Grok skill - Natural language integration
 
 ## Instructions
@@ -91,6 +85,7 @@ When the user runs `/grok`, execute the following:
 1. Parse the command arguments:
    - Extract any `--model` or `-m` flag value (default: "auto")
    - Extract any `--temperature` or `-t` flag value (default: 0.7)
+   - Extract any `--top_p` or `-p` flag value (optional)
    - The remaining text is the query
 
 2. If `--help` or `-h` is provided, show the usage information above
@@ -101,6 +96,7 @@ When the user runs `/grok`, execute the following:
    - `query`: The user's question
    - `model`: The specified model (or "auto")
    - `temperature`: The specified temperature (or 0.7)
+   - `top_p`: The specified top_p (if provided)
 
 5. Present Grok's response, including the metadata (model, tokens, cost)
 

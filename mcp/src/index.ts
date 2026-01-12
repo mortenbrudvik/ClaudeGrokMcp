@@ -244,8 +244,10 @@ async function main(): Promise<void> {
   logServiceStatus(services);
 }
 
-// Start server
-main().catch((error) => {
-  console.error(`[${SERVER_NAME}] Fatal error:`, error);
-  process.exit(1);
-});
+// Start server (only when not running under test frameworks)
+if (!process.env.VITEST && process.env.NODE_ENV !== 'test') {
+  main().catch((error) => {
+    console.error(`[${SERVER_NAME}] Fatal error:`, error);
+    process.exit(1);
+  });
+}

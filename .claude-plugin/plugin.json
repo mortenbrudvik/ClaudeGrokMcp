@@ -1,25 +1,15 @@
 {
   "name": "grok-mcp",
   "version": "2.0.0",
-  "description": "Integrate xAI's Grok models into Claude Code for multi-model collaboration. Features code analysis, extended reasoning, vision support, X/Twitter search, Python execution, and cost tracking.",
+  "description": "Integrate xAI's Grok models into Claude Code for multi-model collaboration",
   "author": {
     "name": "Morten"
   },
   "license": "MIT",
-  "keywords": [
-    "grok",
-    "xai",
-    "mcp",
-    "multi-model",
-    "ai",
-    "llm",
-    "code-analysis",
-    "reasoning",
-    "vision",
-    "twitter",
-    "x-search"
-  ],
+  "keywords": ["grok", "xai", "mcp", "multi-model", "ai", "llm"],
   "repository": "https://github.com/mortenbrudvik/ClaudeGrokMcp",
+  "commands": "./commands/",
+  "skills": "./skills/",
   "mcpServers": {
     "grok": {
       "command": "node",
@@ -28,8 +18,12 @@
         "XAI_API_KEY": "${PLUGIN_ENV_XAI_API_KEY}",
         "GROK_CACHE_ENABLED": "${PLUGIN_ENV_GROK_CACHE_ENABLED:-true}",
         "GROK_CACHE_TTL_SECONDS": "${PLUGIN_ENV_GROK_CACHE_TTL_SECONDS:-300}",
+        "GROK_CACHE_MAX_ENTRIES": "${PLUGIN_ENV_GROK_CACHE_MAX_ENTRIES:-1000}",
         "GROK_COST_LIMIT_USD": "${PLUGIN_ENV_GROK_COST_LIMIT_USD:-10}",
-        "GROK_API_TIER": "${PLUGIN_ENV_GROK_API_TIER:-standard}"
+        "GROK_COST_MAX_RECORDS": "${PLUGIN_ENV_GROK_COST_MAX_RECORDS:-10000}",
+        "GROK_API_TIER": "${PLUGIN_ENV_GROK_API_TIER:-standard}",
+        "GROK_RATE_LIMIT_MAX_PENDING": "${PLUGIN_ENV_GROK_RATE_LIMIT_MAX_PENDING:-100}",
+        "GROK_RATE_LIMIT_PENDING_TIMEOUT_MS": "${PLUGIN_ENV_GROK_RATE_LIMIT_PENDING_TIMEOUT_MS:-30000}"
       }
     }
   }

@@ -14,6 +14,7 @@ export default {
         'perf', // Performance improvement
         'ci', // CI/CD changes
         'revert', // Revert previous commit
+        'merge', // Merge commits from worktree workflow
       ],
     ],
     'scope-enum': [
@@ -21,6 +22,8 @@ export default {
       'always',
       [
         'tools', // MCP tool implementations
+        'services', // Service implementations (cache, cost-tracker, rate-limiter)
+        'server', // MCP server / index.ts
         'client', // xAI API client
         'types', // TypeScript types
         'skill', // SKILL.md
@@ -30,6 +33,9 @@ export default {
         'ci', // CI/CD configuration
         'deps', // Dependencies
         'test', // Test infrastructure
+        'config', // Configuration files
+        'worktree', // Worktree workflow commands/skills
+        'hooks', // Git and Claude hooks
       ],
     ],
     'subject-case': [2, 'always', 'lower-case'],

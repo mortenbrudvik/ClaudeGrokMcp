@@ -4,7 +4,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server.js';
-import { XAIClient, createClient } from './xai-client.js';
+import {
+  XAIClient,
+  createClient,
+  getModelTimeout,
+  DEFAULT_TIMEOUT,
+  SLOW_MODEL_TIMEOUT,
+} from './xai-client.js';
 import { XAIError, MODEL_ALIASES, MODEL_FALLBACKS, MODEL_PRICING } from '../types/index.js';
 
 describe('XAIClient', () => {
@@ -559,6 +565,47 @@ describe('XAIClient', () => {
           messages: [{ role: 'user', content: 'Hello' }],
         })
       ).rejects.toThrow(XAIError);
+    });
+  });
+
+  describe('getModelTimeout', () => {
+    it('should return slow timeout for grok-4-0709 (flagship)', () => {
+      expect(getModelTimeout('grok-4-0709')).toBe(SLOW_MODEL_TIMEOUT);
+    });
+
+    it('should return slow timeout for grok-4 variants without -fast suffix', () => {
+      expect(getModelTimeout('grok-4')).toBe(SLOW_MODEL_TIMEOUT);
+      expect(getModelTimeout('grok-4-0709')).toBe(SLOW_MODEL_TIMEOUT);
+      expect(getModelTimeout('grok-4-something-new')).toBe(SLOW_MODEL_TIMEOUT);
+    });
+
+    it('should return default timeout for fast models', () => {
+      expect(getModelTimeout('grok-4-fast-non-reasoning')).toBe(DEFAULT_TIMEOUT);
+      expect(getModelTimeout('grok-4-1-fast-reasoning')).toBe(DEFAULT_TIMEOUT);
+      expect(getModelTimeout('grok-code-fast-1')).toBe(DEFAULT_TIMEOUT);
+    });
+
+    it('should return default timeout for vision models', () => {
+      expect(getModelTimeout('grok-2-vision-1212')).toBe(DEFAULT_TIMEOUT);
+    });
+
+    it('should return default timeout for other models', () => {
+      expect(getModelTimeout('grok-3')).toBe(DEFAULT_TIMEOUT);
+      expect(getModelTimeout('grok-2-1212')).toBe(DEFAULT_TIMEOUT);
+    });
+
+    it('should use user-specified timeout when provided', () => {
+      expect(getModelTimeout('grok-4-0709', 60000)).toBe(60000);
+      expect(getModelTimeout('grok-4-fast-non-reasoning', 120000)).toBe(120000);
+    });
+
+    it('should use instance timeout as fallback for fast models', () => {
+      expect(getModelTimeout('grok-4-fast-non-reasoning', undefined, 45000)).toBe(45000);
+    });
+
+    it('should ignore instance timeout for slow models (use SLOW_MODEL_TIMEOUT)', () => {
+      // Even with custom instance timeout, slow models get SLOW_MODEL_TIMEOUT
+      expect(getModelTimeout('grok-4-0709', undefined, 45000)).toBe(SLOW_MODEL_TIMEOUT);
     });
   });
 

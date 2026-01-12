@@ -32,6 +32,10 @@ export default [
         Headers: 'readonly',
         Request: 'readonly',
         Response: 'readonly',
+        TextDecoder: 'readonly',
+        TextEncoder: 'readonly',
+        ReadableStream: 'readonly',
+        ReadableStreamDefaultController: 'readonly',
       },
     },
     plugins: {

@@ -5,8 +5,10 @@ A Claude Code plugin that integrates xAI's Grok models for multi-model collabora
 ## Features
 
 - **Natural language triggers**: "Ask Grok...", "What does Grok think..."
-- **Direct command**: `/grok <query>` for quick queries
+- **Direct commands**: `/query`, `/review`, `/debug`, `/design` for quick Grok queries
 - **Model selection**: Choose from fast, smartest, code-optimized, or reasoning models
+- **Model-aware timeouts**: 90s for slow grok-4, 30s for fast models
+- **Smart streaming**: Auto-enables streaming for complex queries
 - **Cost tracking**: See token usage and cost estimates for every query
 - **Response caching**: Reduce costs with intelligent caching
 
@@ -221,6 +223,19 @@ Get current status of the Grok MCP plugin.
 }
 ```
 
+### grok_generate_image
+
+Generate images from text descriptions.
+
+```typescript
+{
+  prompt: string,            // Required: Text description of image to generate
+  n?: number,                // Number of images 1-10 (default: 1)
+  model?: string,            // Model to use (default: grok-2-image-1212)
+  response_format?: string   // "url" or "b64_json" (default: "url")
+}
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -229,7 +244,7 @@ Get current status of the Grok MCP plugin.
 |----------|---------|-------------|
 | `XAI_API_KEY` | Required | Your xAI API key |
 | `XAI_BASE_URL` | `https://api.x.ai/v1` | API base URL |
-| `XAI_TIMEOUT` | `30000` | Request timeout in ms |
+| `XAI_TIMEOUT` | Model-aware | Default timeout (90s for grok-4, 30s for fast models) |
 | `GROK_CACHE_ENABLED` | `true` | Enable response caching |
 | `GROK_COST_LIMIT_USD` | `10` | Session cost limit |
 | `GROK_API_TIER` | `standard` | API tier (standard/enterprise) |
@@ -301,7 +316,10 @@ grok-mcp/
 │   └── using-grok/
 │       └── SKILL.md       # Natural language skill
 ├── commands/
-│   └── grok.md            # /grok command
+│   ├── query.md           # /grok-mcp:query command
+│   ├── review-with-grok.md # /grok-mcp:review-with-grok
+│   ├── debug-with-grok.md  # /grok-mcp:debug-with-grok
+│   └── design-review.md    # /grok-mcp:design-review
 ├── mcp/
 │   ├── package.json
 │   ├── tsconfig.json
@@ -309,9 +327,13 @@ grok-mcp/
 │       ├── index.ts       # MCP server entry
 │       ├── client/
 │       │   └── xai-client.ts
+│       ├── services/      # Cache, cost tracking, rate limiting
 │       ├── tools/
 │       │   ├── query.ts   # grok_query tool
-│       │   └── models.ts  # grok_models tool
+│       │   ├── models.ts  # grok_models tool
+│       │   ├── analyze-code.ts
+│       │   ├── reason.ts
+│       │   └── ...        # 10 tools total
 │       └── types/
 │           └── index.ts
 └── README.md

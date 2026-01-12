@@ -17,11 +17,14 @@ import {
   XAIError,
   Services,
   AutoModelSelection,
-VISION_CAPABLE_MODELS,
+  VISION_CAPABLE_MODELS,
   MessageContentPart,
   MessageContent,
   JsonParseResult,
   ResponseFormat,
+  ComplexityScore,
+  WeightedIndicator,
+  WEIGHT_TIERS,
 } from '../types/index.js';
 import { CostTracker } from '../services/cost-tracker.js';
 
@@ -90,6 +93,205 @@ const JSON_MODE_SYSTEM_PROMPT = `You MUST respond with valid JSON only. Follow t
 3. Ensure all strings are properly escaped
 4. Use double quotes for all keys and string values
 5. If you cannot provide JSON, return: {"error": "reason"}`;
+
+/**
+ * Long output indicators for smart streaming decision (P4-014)
+ * These patterns suggest the response will be lengthy and benefit from streaming
+ */
+export const LONG_OUTPUT_INDICATORS: readonly WeightedIndicator[] = [
+  // DEFINITIVE (15) - Explicit long-form requests
+  { pattern: 'explain in detail', weight: WEIGHT_TIERS.DEFINITIVE },
+  { pattern: 'step by step', weight: WEIGHT_TIERS.DEFINITIVE },
+  { pattern: 'step-by-step', weight: WEIGHT_TIERS.DEFINITIVE },
+  { pattern: 'comprehensive', weight: WEIGHT_TIERS.DEFINITIVE },
+  { pattern: 'thoroughly', weight: WEIGHT_TIERS.DEFINITIVE },
+  { pattern: 'in depth', weight: WEIGHT_TIERS.DEFINITIVE },
+  { pattern: 'in-depth', weight: WEIGHT_TIERS.DEFINITIVE },
+
+  // STRONG (10) - Code generation signals
+  { pattern: 'write code', weight: WEIGHT_TIERS.STRONG },
+  { pattern: 'implement', weight: WEIGHT_TIERS.STRONG },
+  { pattern: 'create a function', weight: WEIGHT_TIERS.STRONG },
+  { pattern: 'build a', weight: WEIGHT_TIERS.STRONG },
+  { pattern: 'full implementation', weight: WEIGHT_TIERS.STRONG },
+  { pattern: 'complete code', weight: WEIGHT_TIERS.STRONG },
+
+  // MODERATE (5) - Analysis signals
+  { pattern: 'analyze', weight: WEIGHT_TIERS.MODERATE },
+  { pattern: 'analyse', weight: WEIGHT_TIERS.MODERATE },
+  { pattern: 'compare', weight: WEIGHT_TIERS.MODERATE },
+  { pattern: 'list all', weight: WEIGHT_TIERS.MODERATE },
+  { pattern: 'describe', weight: WEIGHT_TIERS.MODERATE },
+  { pattern: 'explain how', weight: WEIGHT_TIERS.MODERATE },
+];
+
+/**
+ * Thresholds for auto-streaming decision (P4-014)
+ */
+export const STREAMING_THRESHOLDS = {
+  /** Query length (chars) above which to auto-stream */
+  QUERY_LENGTH: 500,
+  /** Complexity score above which to auto-stream */
+  COMPLEXITY_SCORE: 40,
+  /** Long output indicator score threshold */
+  LONG_OUTPUT_SCORE: 10,
+} as const;
+
+/**
+ * Result of streaming decision with reason for UX display (P4-014)
+ */
+export interface StreamingDecision {
+  /** Whether to use streaming mode */
+  shouldStream: boolean;
+  /** Reason for the decision (for UX display) */
+  reason:
+    | 'explicit'
+    | 'json_mode'
+    | 'complexity'
+    | 'query_length'
+    | 'reasoning_model'
+    | 'long_output'
+    | 'simple';
+  /** Human-readable explanation */
+  explanation: string;
+  /** Score that triggered the decision (if applicable) */
+  score?: number;
+}
+
+/**
+ * Helper function to check if text matches an indicator pattern (P4-014)
+ * Multi-word patterns use substring match, single words use word boundary
+ */
+function matchesIndicator(text: string, indicator: string): boolean {
+  const indicatorLower = indicator.toLowerCase();
+  if (indicatorLower.includes(' ')) {
+    // Multi-word pattern: case-insensitive substring match
+    return text.toLowerCase().includes(indicatorLower);
+  }
+  // Single word: use word boundary to prevent partial matches
+  const escapedIndicator = indicator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wordRegex = new RegExp(`\\b${escapedIndicator}\\b`, 'i');
+  return wordRegex.test(text);
+}
+
+/**
+ * Sum weighted matches for long output indicators (P4-014)
+ */
+function sumLongOutputMatches(text: string): number {
+  let score = 0;
+  for (const { pattern, weight } of LONG_OUTPUT_INDICATORS) {
+    if (matchesIndicator(text, pattern)) {
+      score += weight;
+    }
+  }
+  return score;
+}
+
+/**
+ * Determine whether to auto-enable streaming based on query characteristics (P4-014)
+ *
+ * Decision hierarchy:
+ * 1. Explicit stream parameter always wins (return early if set)
+ * 2. JSON mode -> never stream (partial JSON is invalid)
+ * 3. Reasoning model -> always stream (thinking traces benefit from streaming)
+ * 4. Long output indicators -> stream if score >= threshold
+ * 5. Query length > 500 chars -> stream
+ * 6. High complexity score -> stream
+ * 7. Otherwise -> no stream (preserve cache benefits)
+ *
+ * @param query - The user's query text
+ * @param context - Optional system context
+ * @param explicitStream - User's explicit stream parameter (true/false/undefined)
+ * @param resolvedModel - The model that will be used for the query
+ * @param isJsonMode - Whether JSON mode is enabled
+ * @param complexityScore - Pre-calculated complexity score (optional)
+ * @returns StreamingDecision with shouldStream boolean and reason
+ */
+export function shouldAutoStream(
+  query: string,
+  context: string | undefined,
+  explicitStream: boolean | undefined,
+  resolvedModel: string,
+  isJsonMode: boolean,
+  complexityScore?: ComplexityScore
+): StreamingDecision {
+  // 1. Explicit override always wins
+  if (explicitStream === true) {
+    return {
+      shouldStream: true,
+      reason: 'explicit',
+      explanation: 'Streaming enabled by explicit parameter',
+    };
+  }
+  if (explicitStream === false) {
+    return {
+      shouldStream: false,
+      reason: 'explicit',
+      explanation: 'Streaming disabled by explicit parameter',
+    };
+  }
+
+  // 2. JSON mode -> never auto-stream (partial JSON is invalid)
+  if (isJsonMode) {
+    return {
+      shouldStream: false,
+      reason: 'json_mode',
+      explanation: 'Non-streaming for JSON mode (requires complete response)',
+    };
+  }
+
+  // 3. Reasoning model -> always stream (thinking traces benefit)
+  // Note: Exclude "non-reasoning" models which contain "reasoning" in the name
+  const isReasoningModel =
+    (resolvedModel.includes('reasoning') && !resolvedModel.includes('non-reasoning')) ||
+    resolvedModel === 'grok-4-1-fast-reasoning';
+  if (isReasoningModel) {
+    return {
+      shouldStream: true,
+      reason: 'reasoning_model',
+      explanation: 'Auto-streaming enabled for reasoning model (thinking traces)',
+    };
+  }
+
+  // 4. Check for long output indicators
+  const combinedText = (query + ' ' + (context || '')).toLowerCase();
+  const longOutputScore = sumLongOutputMatches(combinedText);
+  if (longOutputScore >= STREAMING_THRESHOLDS.LONG_OUTPUT_SCORE) {
+    return {
+      shouldStream: true,
+      reason: 'long_output',
+      explanation: `Auto-streaming enabled (long output indicators, score: ${longOutputScore})`,
+      score: longOutputScore,
+    };
+  }
+
+  // 5. Long query -> stream
+  if (query.length > STREAMING_THRESHOLDS.QUERY_LENGTH) {
+    return {
+      shouldStream: true,
+      reason: 'query_length',
+      explanation: `Auto-streaming enabled (query length: ${query.length} > ${STREAMING_THRESHOLDS.QUERY_LENGTH})`,
+      score: query.length,
+    };
+  }
+
+  // 6. High complexity -> stream
+  if (complexityScore && complexityScore.adjusted >= STREAMING_THRESHOLDS.COMPLEXITY_SCORE) {
+    return {
+      shouldStream: true,
+      reason: 'complexity',
+      explanation: `Auto-streaming enabled (complexity: ${complexityScore.adjusted}%)`,
+      score: complexityScore.adjusted,
+    };
+  }
+
+  // 7. Default: no streaming (preserve cache benefits for simple queries)
+  return {
+    shouldStream: false,
+    reason: 'simple',
+    explanation: 'Non-streaming for simple query (cache benefits preserved)',
+  };
+}
 
 /**
  * Parse JSON from model response (P4-016)
@@ -174,18 +376,17 @@ export const grokQuerySchema = {
     },
     stream: {
       type: 'boolean',
-      description: 'Enable streaming response (default: false)',
-      default: false,
+      description:
+        'Enable streaming response. When omitted, auto-streaming decides based on query complexity.',
     },
     timeout: {
       type: 'integer',
       description:
-        'Request timeout in milliseconds (default: 30000). Increase for complex queries to slower models like grok-4.',
+        'Request timeout in milliseconds. Default varies by model: 90s for grok-4/smartest (slow flagship), 30s for fast models. Override if needed.',
       minimum: 1000,
       maximum: 120000,
-      default: 30000,
     },
-image_url: {
+    image_url: {
       type: 'string',
       description:
         'Image URL for vision queries. Supports HTTPS URLs or base64 data URIs (data:image/png;base64,...). When provided, auto-selects vision-capable model if model is "auto".',
@@ -347,7 +548,7 @@ export function validateGrokQueryInput(input: unknown): GrokQueryInput {
     }
   }
 
-// Optional: image_url (P4-015 Vision Support)
+  // Optional: image_url (P4-015 Vision Support)
   if (params.image_url !== undefined) {
     if (typeof params.image_url !== 'string') {
       throw new Error('image_url must be a string');
@@ -390,9 +591,9 @@ export function validateGrokQueryInput(input: unknown): GrokQueryInput {
     max_tokens: (params.max_tokens as number) || 4096,
     temperature: (params.temperature as number) ?? 0.7,
     top_p: params.top_p as number | undefined,
-    stream: (params.stream as boolean) || false,
+    stream: params.stream as boolean | undefined, // Preserve undefined to allow auto-streaming
     timeout: (params.timeout as number) || 30000,
-image_url: params.image_url as string | undefined,
+    image_url: params.image_url as string | undefined,
     image_detail: (params.image_detail as 'auto' | 'low' | 'high') || 'auto',
     response_format: params.response_format as ResponseFormat | undefined,
   };
@@ -720,6 +921,8 @@ interface FormatOptions {
   };
   /** Whether this is a vision query (P4-015) */
   isVisionQuery?: boolean;
+  /** Auto-streaming decision info (P4-014) */
+  streamingDecision?: StreamingDecision;
 }
 
 /**
@@ -756,6 +959,19 @@ function formatResponse(
   // Partial response indicator for streaming timeouts
   if (options.streamingInfo?.partial) {
     statusParts.push(`⚠️ **PARTIAL** (${options.streamingInfo.chunksReceived} chunks)`);
+  }
+
+  // Auto-streaming indicator (P4-014)
+  if (options.streamingDecision?.shouldStream && options.streamingDecision.reason !== 'explicit') {
+    const reasonLabels: Record<string, string> = {
+      reasoning_model: 'reasoning',
+      long_output: 'long output',
+      query_length: 'long query',
+      complexity: 'complex',
+    };
+    const label =
+      reasonLabels[options.streamingDecision.reason] || options.streamingDecision.reason;
+    statusParts.push(`🌊 **AUTO-STREAM** (${label})`);
   }
 
   // Vision query badge (P4-015)
@@ -884,13 +1100,28 @@ export async function handleGrokQuery(
     // Resolve model alias to actual model ID (with intelligent auto-selection)
     const resolvedModel = client.resolveModel(originalModelInput, input.query, input.context);
 
-    // Check if streaming is enabled (skip cache for streaming)
-    const streamingMode = input.stream === true;
+    // Check for JSON mode (needed for streaming decision)
+    const isJsonMode = input.response_format?.type === 'json_object';
+
+    // Determine streaming mode with smart auto-detection (P4-014)
+    const streamingDecision = shouldAutoStream(
+      input.query,
+      input.context,
+      input.stream,
+      resolvedModel,
+      isJsonMode,
+      autoSelection?.complexityScore
+    );
+    const streamingMode = streamingDecision.shouldStream;
+
+    // Log auto-streaming decision for debugging
+    if (streamingDecision.reason !== 'explicit' && streamingMode) {
+      console.error(`[grok_query] Auto-streaming: ${streamingDecision.explanation}`);
+    }
 
     // 1. CHECK CACHE (before any API call) - skip for streaming
     let cacheKey: string | undefined;
     let cacheExpiresIn: number | undefined;
-    const isJsonMode = input.response_format?.type === 'json_object';
     if (!streamingMode && services?.cache.isEnabled()) {
       // Include JSON mode in cache key to prevent mixing JSON/non-JSON responses (P4-016)
       const baseKey = services.cache.generateKey(input.query, resolvedModel, input.context);
@@ -915,6 +1146,7 @@ export async function handleGrokQuery(
             originalModelInput,
             cacheInfo: { isCached: true, expiresIn: cacheExpiresIn },
             isVisionQuery: !!input.image_url,
+            streamingDecision, // P4-014: include for transparency (will be 'simple' or 'json_mode')
           }
         );
       }
@@ -994,6 +1226,7 @@ export async function handleGrokQuery(
         expensiveQueryWarning: result.cost.estimated_usd > UX_THRESHOLDS.EXPENSIVE_QUERY_COST,
         streamingInfo,
         isVisionQuery: !!input.image_url,
+        streamingDecision, // P4-014: smart streaming decision info
       });
     } catch (error) {
       // Release rate limiter slot on failure

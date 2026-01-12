@@ -62,8 +62,18 @@ Query Grok with a question or prompt. Supports vision/image analysis.
 | `max_tokens` | integer | No | Maximum response tokens (default: 4096) |
 | `temperature` | number | No | Sampling temperature 0-2 (default: 0.7) |
 | `top_p` | number | No | Nucleus sampling 0-1 (alternative to temperature) |
+| `stream` | boolean | No | Enable SSE streaming (default: auto-detected) |
 | `image_url` | string | No | Image URL (HTTPS) or base64 data URI for vision queries |
 | `image_detail` | string | No | Detail level for image analysis: "auto", "low", "high" (default: "auto") |
+
+**Smart Streaming (P4-014):**
+When `stream` is not specified, streaming is automatically enabled for:
+- Reasoning models (thinking traces benefit from streaming)
+- Long output indicators ("explain in detail", "step by step", "write code", etc.)
+- Queries > 500 characters
+- High complexity queries (complexity score >= 40)
+
+Simple queries use non-streaming to preserve cache benefits. Explicit `stream: true/false` always overrides auto-detection.
 
 **Vision Support (P4-015):**
 - Provide an `image_url` to enable image analysis
@@ -444,7 +454,10 @@ Consider offering Grok's perspective when:
 
 ## Related
 
-- `/grok` command - Direct Grok queries from the command line
+- `/query` command - Direct Grok queries from the command line
+- `/review` command - Code review with Grok analysis
+- `/debug` command - Collaborative debugging
+- `/design` command - Architecture review with confidence scoring
 - `grok_models` tool - Check available models and pricing
 - `grok_analyze_code` tool - Specialized code analysis
 - `grok_reason` tool - Extended reasoning for complex problems

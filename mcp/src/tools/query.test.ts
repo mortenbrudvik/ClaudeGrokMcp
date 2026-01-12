@@ -8,7 +8,7 @@ import { XAIClient } from '../client/xai-client.js';
 import { ResponseCache } from '../services/cache.js';
 import { CostTracker } from '../services/cost-tracker.js';
 import { RateLimiter } from '../services/rate-limiter.js';
-import type { Services } from '../types/index.js';
+import type { Services, ComplexityScore } from '../types/index.js';
 import {
   validateGrokQueryInput,
   executeGrokQuery,
@@ -16,6 +16,9 @@ import {
   handleGrokQuery,
   grokQuerySchema,
   grokQueryToolDefinition,
+  shouldAutoStream,
+  LONG_OUTPUT_INDICATORS,
+  STREAMING_THRESHOLDS,
 } from './query.js';
 
 // Create a test client
@@ -41,7 +44,7 @@ describe('grok_query tool', () => {
       expect(grokQuerySchema.properties.model.default).toBe('auto');
       expect(grokQuerySchema.properties.max_tokens.default).toBe(4096);
       expect(grokQuerySchema.properties.temperature.default).toBe(0.7);
-      expect(grokQuerySchema.properties.stream.default).toBe(false);
+      expect('default' in grokQuerySchema.properties.stream).toBe(false); // No default allows auto-streaming
     });
 
     it('should not allow additional properties', () => {
@@ -72,7 +75,7 @@ describe('grok_query tool', () => {
         expect(result.model).toBe('auto');
         expect(result.max_tokens).toBe(4096);
         expect(result.temperature).toBe(0.7);
-        expect(result.stream).toBe(false);
+        expect(result.stream).toBeUndefined(); // Allows auto-streaming to decide
       });
 
       it('should accept full input with all parameters', () => {
@@ -1783,7 +1786,7 @@ describe('grok_query tool', () => {
       // Helper to create SSE stream
       const createSSEStream = (data: string[]): ReadableStream => {
         return new ReadableStream({
-          start(controller) {
+          start(controller): void {
             data.forEach((chunk) => controller.enqueue(new TextEncoder().encode(chunk)));
             controller.close();
           },
@@ -1830,6 +1833,400 @@ describe('grok_query tool', () => {
 
         // When streaming completes normally, partial should be false
         expect(result.partial).toBe(false);
+      });
+    });
+  });
+
+  describe('smart streaming (P4-014)', () => {
+    describe('shouldAutoStream', () => {
+      describe('explicit override', () => {
+        it('should return true when stream=true explicitly', () => {
+          const result = shouldAutoStream('Hello', undefined, true, 'grok-4-fast', false);
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('explicit');
+          expect(result.explanation).toContain('explicit parameter');
+        });
+
+        it('should return false when stream=false explicitly', () => {
+          const result = shouldAutoStream(
+            'Explain step by step how React renders',
+            undefined,
+            false,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('explicit');
+        });
+
+        it('should override all other signals with explicit stream=false', () => {
+          // Even with reasoning model, explicit false wins
+          const result = shouldAutoStream(
+            'Complex query',
+            undefined,
+            false,
+            'grok-4-1-fast-reasoning',
+            false
+          );
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('explicit');
+        });
+      });
+
+      describe('JSON mode', () => {
+        it('should never auto-stream for JSON mode', () => {
+          const result = shouldAutoStream(
+            'Explain step by step how to do this',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            true // isJsonMode
+          );
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('json_mode');
+          expect(result.explanation).toContain('JSON mode');
+        });
+
+        it('should allow explicit streaming for JSON mode', () => {
+          // Explicit override still works
+          const result = shouldAutoStream(
+            'Return JSON data',
+            undefined,
+            true, // explicit stream=true
+            'grok-4-fast',
+            true // isJsonMode
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('explicit');
+        });
+      });
+
+      describe('reasoning model', () => {
+        it('should auto-stream for reasoning model', () => {
+          const result = shouldAutoStream(
+            'Hello',
+            undefined,
+            undefined,
+            'grok-4-1-fast-reasoning',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('reasoning_model');
+          expect(result.explanation).toContain('reasoning model');
+        });
+
+        it('should auto-stream for model with "reasoning" in name', () => {
+          const result = shouldAutoStream(
+            'Simple query',
+            undefined,
+            undefined,
+            'some-reasoning-model',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('reasoning_model');
+        });
+
+        it('should NOT auto-stream for "non-reasoning" models', () => {
+          const result = shouldAutoStream(
+            'Simple query',
+            undefined,
+            undefined,
+            'grok-4-fast-non-reasoning',
+            false
+          );
+          // "non-reasoning" should NOT trigger reasoning model streaming
+          expect(result.reason).not.toBe('reasoning_model');
+        });
+      });
+
+      describe('long output indicators', () => {
+        it('should auto-stream for "explain in detail"', () => {
+          const result = shouldAutoStream(
+            'Explain in detail how React works',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('long_output');
+          expect(result.score).toBeGreaterThanOrEqual(STREAMING_THRESHOLDS.LONG_OUTPUT_SCORE);
+        });
+
+        it('should auto-stream for "step by step"', () => {
+          const result = shouldAutoStream(
+            'Walk me through step by step',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('long_output');
+        });
+
+        it('should auto-stream for "step-by-step"', () => {
+          const result = shouldAutoStream(
+            'Give me a step-by-step guide',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('long_output');
+        });
+
+        it('should auto-stream for "write code" + "implement"', () => {
+          const result = shouldAutoStream(
+            'Write code to implement a sorting algorithm',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('long_output');
+        });
+
+        it('should auto-stream for "comprehensive" analysis', () => {
+          const result = shouldAutoStream(
+            'Provide a comprehensive analysis of this code',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('long_output');
+        });
+
+        it('should check context for long output indicators', () => {
+          const result = shouldAutoStream(
+            'Review this',
+            'Please explain in detail how this code works',
+            undefined,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('long_output');
+        });
+
+        it('should match multi-word patterns case-insensitively', () => {
+          // "Step By Step" with mixed case should still trigger
+          const result = shouldAutoStream(
+            'Explain Step By Step how a for loop works',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('long_output');
+        });
+      });
+
+      describe('query length', () => {
+        it('should auto-stream for queries > 500 chars', () => {
+          const longQuery = 'a'.repeat(501);
+          const result = shouldAutoStream(longQuery, undefined, undefined, 'grok-4-fast', false);
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('query_length');
+          expect(result.score).toBe(501);
+        });
+
+        it('should not auto-stream for queries exactly 500 chars', () => {
+          const exactQuery = 'a'.repeat(500);
+          const result = shouldAutoStream(exactQuery, undefined, undefined, 'grok-4-fast', false);
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('simple');
+        });
+
+        it('should not auto-stream for queries < 500 chars without other indicators', () => {
+          const shortQuery = 'What is 2+2?';
+          const result = shouldAutoStream(shortQuery, undefined, undefined, 'grok-4-fast', false);
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('simple');
+        });
+      });
+
+      describe('complexity score', () => {
+        const createComplexityScore = (adjusted: number): ComplexityScore => ({
+          raw: adjusted,
+          adjusted,
+          confidence: 80,
+          category: 'complex',
+          breakdown: {
+            codeScore: 0,
+            reasoningScore: 0,
+            complexityScore: adjusted,
+            simplicityPenalty: 0,
+            lengthMultiplier: 1,
+            contextMultiplier: 1,
+          },
+          matchedIndicators: ['system design'],
+        });
+
+        it('should auto-stream for high complexity score (>= 40)', () => {
+          const result = shouldAutoStream(
+            'Evaluate',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false,
+            createComplexityScore(45)
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('complexity');
+          expect(result.score).toBe(45);
+        });
+
+        it('should auto-stream for complexity score exactly 40', () => {
+          const result = shouldAutoStream(
+            'Evaluate',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false,
+            createComplexityScore(40)
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('complexity');
+        });
+
+        it('should not auto-stream for complexity score < 40', () => {
+          const result = shouldAutoStream(
+            'Simple',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false,
+            createComplexityScore(39)
+          );
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('simple');
+        });
+      });
+
+      describe('simple queries (cache preservation)', () => {
+        it('should not auto-stream for simple queries', () => {
+          const result = shouldAutoStream('Hello', undefined, undefined, 'grok-4-fast', false);
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('simple');
+          expect(result.explanation).toContain('cache benefits preserved');
+        });
+
+        it('should not auto-stream for "what is" questions', () => {
+          const result = shouldAutoStream(
+            'What is TypeScript?',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('simple');
+        });
+
+        it('should not auto-stream for short factual queries', () => {
+          const result = shouldAutoStream(
+            'Who invented the telephone?',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('simple');
+        });
+      });
+
+      describe('decision hierarchy', () => {
+        it('should prioritize explicit over reasoning model', () => {
+          const result = shouldAutoStream(
+            'Query',
+            undefined,
+            false, // explicit false
+            'grok-4-1-fast-reasoning',
+            false
+          );
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('explicit');
+        });
+
+        it('should prioritize JSON mode over long output indicators', () => {
+          const result = shouldAutoStream(
+            'Explain step by step',
+            undefined,
+            undefined,
+            'grok-4-fast',
+            true // JSON mode
+          );
+          expect(result.shouldStream).toBe(false);
+          expect(result.reason).toBe('json_mode');
+        });
+
+        it('should prioritize reasoning model over long output indicators', () => {
+          const result = shouldAutoStream(
+            'Simple hello', // No long output indicators
+            undefined,
+            undefined,
+            'grok-4-1-fast-reasoning',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('reasoning_model');
+        });
+
+        it('should prioritize long output over query length', () => {
+          const result = shouldAutoStream(
+            'Explain in detail', // DEFINITIVE indicator (15 points)
+            undefined,
+            undefined,
+            'grok-4-fast',
+            false
+          );
+          expect(result.shouldStream).toBe(true);
+          expect(result.reason).toBe('long_output');
+        });
+      });
+    });
+
+    describe('LONG_OUTPUT_INDICATORS', () => {
+      it('should have DEFINITIVE weight indicators', () => {
+        const definitivePatterns = LONG_OUTPUT_INDICATORS.filter((i) => i.weight === 15);
+        expect(definitivePatterns.length).toBeGreaterThan(0);
+        expect(definitivePatterns.some((i) => i.pattern === 'explain in detail')).toBe(true);
+        expect(definitivePatterns.some((i) => i.pattern === 'step by step')).toBe(true);
+      });
+
+      it('should have STRONG weight indicators', () => {
+        const strongPatterns = LONG_OUTPUT_INDICATORS.filter((i) => i.weight === 10);
+        expect(strongPatterns.length).toBeGreaterThan(0);
+        expect(strongPatterns.some((i) => i.pattern === 'write code')).toBe(true);
+        expect(strongPatterns.some((i) => i.pattern === 'implement')).toBe(true);
+      });
+
+      it('should have MODERATE weight indicators', () => {
+        const moderatePatterns = LONG_OUTPUT_INDICATORS.filter((i) => i.weight === 5);
+        expect(moderatePatterns.length).toBeGreaterThan(0);
+        expect(moderatePatterns.some((i) => i.pattern === 'analyze')).toBe(true);
+      });
+    });
+
+    describe('STREAMING_THRESHOLDS', () => {
+      it('should have query length threshold of 500', () => {
+        expect(STREAMING_THRESHOLDS.QUERY_LENGTH).toBe(500);
+      });
+
+      it('should have complexity score threshold of 40', () => {
+        expect(STREAMING_THRESHOLDS.COMPLEXITY_SCORE).toBe(40);
+      });
+
+      it('should have long output score threshold of 10', () => {
+        expect(STREAMING_THRESHOLDS.LONG_OUTPUT_SCORE).toBe(10);
       });
     });
   });

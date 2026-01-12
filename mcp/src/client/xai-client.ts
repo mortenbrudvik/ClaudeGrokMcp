@@ -34,8 +34,39 @@ import {
 } from '../types/index.js';
 
 const DEFAULT_BASE_URL = 'https://api.x.ai/v1';
-const DEFAULT_TIMEOUT = 30000; // 30 seconds
+export const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const DEFAULT_MAX_RETRIES = 2;
+export const SLOW_MODEL_TIMEOUT = 90000; // 90 seconds for flagship grok-4
+
+/**
+ * Get appropriate timeout for a model based on its speed characteristics.
+ * Flagship grok-4 models are significantly slower than fast variants.
+ *
+ * @param model - Resolved model ID (not alias)
+ * @param requestTimeout - User-specified timeout (takes precedence)
+ * @param instanceTimeout - Client instance default timeout
+ * @returns Effective timeout in milliseconds
+ */
+export function getModelTimeout(
+  model: string,
+  requestTimeout?: number,
+  instanceTimeout: number = DEFAULT_TIMEOUT
+): number {
+  // User-specified timeout always takes precedence
+  if (requestTimeout !== undefined) return requestTimeout;
+
+  // Fast models and vision get standard timeout
+  if (model.includes('-fast') || model.includes('-vision')) {
+    return instanceTimeout;
+  }
+
+  // Flagship grok-4 variants (without -fast suffix) are slow
+  if (model.startsWith('grok-4') && !model.includes('-fast')) {
+    return SLOW_MODEL_TIMEOUT;
+  }
+
+  return instanceTimeout;
+}
 
 /**
  * Client for interacting with xAI's Grok API
@@ -533,6 +564,9 @@ export class XAIClient {
     // Extract timeout from params (don't send to API)
     const { timeout: requestTimeout, ...apiParams } = params;
 
+    // Use model-aware timeout (grok-4 flagship models get 90s default)
+    const effectiveTimeout = getModelTimeout(resolvedModel, requestTimeout, this.timeout);
+
     const requestBody = {
       ...apiParams,
       model: resolvedModel,
@@ -549,7 +583,7 @@ export class XAIClient {
       '/chat/completions',
       requestBody,
       0, // retryCount
-      requestTimeout
+      effectiveTimeout
     );
 
     return response;
@@ -571,8 +605,10 @@ export class XAIClient {
     const resolvedModel = this.resolveModel(params.model);
     const { timeout: requestTimeout, ...apiParams } = params;
 
+    // Use model-aware timeout (grok-4 flagship models get 90s default)
+    const effectiveTimeout = getModelTimeout(resolvedModel, requestTimeout, this.timeout);
+
     const controller = new AbortController();
-    const effectiveTimeout = requestTimeout ?? this.timeout;
     const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
     const url = `${this.baseUrl}/chat/completions`;
