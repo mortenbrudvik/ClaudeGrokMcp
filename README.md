@@ -21,7 +21,7 @@ A Claude Code plugin that integrates xAI's Grok models for multi-model collabora
 
 ```bash
 # Add the plugin marketplace
-/plugin marketplace add your-username/grok-mcp
+/plugin marketplace add mortenbrudvik/ClaudeGrokMcp
 
 # Install the plugin
 /plugin install grok-mcp@grok-mcp-dev
