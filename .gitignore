@@ -486,8 +486,8 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-# MCP Server build outputs
-mcp/dist/
+# MCP Server build outputs - NOTE: dist/ is intentionally NOT ignored
+# so that plugin installations include the pre-built JavaScript
 
 # TypeScript build info
 *.tsbuildinfo
