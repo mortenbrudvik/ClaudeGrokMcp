@@ -33,11 +33,22 @@ A Claude Code plugin that integrates xAI's Grok models for multi-model collabora
 
 Add to your environment or Claude Code settings:
 
+**macOS/Linux (bash/zsh):**
 ```bash
 export XAI_API_KEY=xai-your-key-here
 ```
 
-Or configure in Claude Code:
+**Windows PowerShell:**
+```powershell
+$env:XAI_API_KEY = "xai-your-key-here"
+```
+
+**Windows Command Prompt:**
+```cmd
+set XAI_API_KEY=xai-your-key-here
+```
+
+Or configure in Claude Code (works on all platforms):
 ```bash
 /config set PLUGIN_ENV_XAI_API_KEY=xai-your-key-here
 ```
@@ -310,9 +321,9 @@ grok-mcp/
 
 ### "XAI_API_KEY is required"
 
-Set your API key:
+Set your API key (see [Set API Key](#set-api-key) above for platform-specific commands), or use:
 ```bash
-export XAI_API_KEY=xai-your-key-here
+/config set PLUGIN_ENV_XAI_API_KEY=xai-your-key-here
 ```
 
 ### "Rate limit exceeded"
