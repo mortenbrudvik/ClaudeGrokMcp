@@ -827,7 +827,7 @@ export interface GrokQueryInput {
   top_p?: number;
   stream?: boolean;
   timeout?: number;
-/** Image URL for vision queries (HTTPS or base64 data URI) - P4-015 */
+  /** Image URL for vision queries (HTTPS or base64 data URI) - P4-015 */
   image_url?: string;
   /** Image detail level for vision queries - P4-015 */
   image_detail?: 'auto' | 'low' | 'high';
@@ -1020,14 +1020,65 @@ export interface AgentTokenUsage {
 }
 
 /**
+ * Content item in an assistant message (part of Agent Tools output)
+ * Note: The API uses 'output_text' for text content, not just 'text'
+ */
+export interface AgentOutputContentItem {
+  type: 'text' | 'output_text' | 'refusal' | string;
+  text?: string;
+  refusal?: string;
+  logprobs?: unknown[];
+  annotations?: unknown[];
+}
+
+/**
+ * Assistant message in Agent Tools output array
+ */
+export interface AgentOutputMessage {
+  id: string;
+  type: 'message';
+  role: 'assistant';
+  status: 'completed' | 'incomplete' | 'in_progress';
+  content: AgentOutputContentItem[];
+}
+
+/**
+ * Tool call item in Agent Tools output array
+ */
+export interface AgentOutputToolCall {
+  id: string;
+  type: 'code_interpreter_call' | 'custom_tool_call' | string;
+  status: 'completed' | 'failed' | 'in_progress';
+  code?: string;
+  outputs?: unknown[];
+  call_id?: string;
+  name?: string;
+  input?: string;
+}
+
+/**
+ * Union type for items in the output array
+ */
+export type AgentOutputItem = AgentOutputMessage | AgentOutputToolCall;
+
+/**
  * Response from Agent Tools API (POST /v1/responses)
+ *
+ * Note: The API returns 'output' as an array containing tool calls and assistant messages.
+ * The text response is extracted from output[].content where type === 'message'.
+ * The 'created_at' field is an ISO string, not Unix timestamp.
  */
 export interface AgentToolsResponse {
   id: string;
   object: 'response';
-  created: number;
+  /** Creation timestamp (ISO 8601 string) */
+  created_at: string;
+  /** Alias for created_at for backwards compatibility */
+  created?: number;
   model: string;
-  /** The response content (may be null/undefined in some cases) */
+  /** The response output array containing tool calls and assistant messages */
+  output?: AgentOutputItem[];
+  /** Legacy content field (may be undefined in newer API versions) */
   content?: string | null;
   /** Token usage breakdown */
   usage: AgentTokenUsage;
@@ -1041,6 +1092,47 @@ export interface AgentToolsResponse {
   tool_calls?: AgentToolCall[];
   /** Stop reason */
   stop_reason?: 'end_turn' | 'max_turns' | 'tool_use';
+  /** Reasoning trace (if reasoning model used) */
+  reasoning?: unknown;
+  /** Max output tokens setting */
+  max_output_tokens?: number;
+  /** Parallel tool calls setting */
+  parallel_tool_calls?: boolean;
+  /** Previous response ID for multi-turn conversations */
+  previous_response_id?: string | null;
+  /** Temperature setting used */
+  temperature?: number;
+}
+
+/**
+ * Extract text content from Agent Tools API response output array
+ * Per xAI docs: response.output[-1].content[0].text
+ * The last item in output array contains the final assistant response
+ */
+export function extractAgentResponseText(output?: AgentOutputItem[]): string {
+  if (!output || !Array.isArray(output) || output.length === 0) return '';
+
+  // Per xAI documentation: final response is at output[-1].content[0].text
+  const lastItem = output[output.length - 1];
+
+  // The last item should be a message with content array
+  if (!lastItem || !('content' in lastItem)) return '';
+
+  const message = lastItem as AgentOutputMessage;
+  if (!message.content || !Array.isArray(message.content) || message.content.length === 0)
+    return '';
+
+  // Get text from first content item (output_text type)
+  const firstContent = message.content[0];
+  if (firstContent && firstContent.text) {
+    return firstContent.text;
+  }
+
+  // Fallback: try to extract all text items
+  return message.content
+    .filter((item) => item.text)
+    .map((item) => item.text!)
+    .join('\n');
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   XSearchConfig,
   XAIError,
   Services,
+  extractAgentResponseText,
 } from '../types/index.js';
 
 const DEFAULT_SEARCH_MODEL = 'grok-4-1-fast';
@@ -115,8 +116,11 @@ export async function handleGrokSearchX(
       services.rateLimiter.recordUsage(response.usage.total_tokens, 1000);
       services.rateLimiter.clearBackoff();
     }
+    // API returns 'output' array containing tool calls and assistant messages
+    // Extract text from the assistant message in the output array
+    const responseContent = extractAgentResponseText(response.output) || response.content || '';
     const result: GrokSearchXResponse = {
-      response: response.content,
+      response: responseContent,
       model: response.model,
       usage: response.usage,
       cost,

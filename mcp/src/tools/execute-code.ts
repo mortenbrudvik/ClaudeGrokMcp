@@ -12,6 +12,7 @@ import {
   CodeExecutionConfig,
   XAIError,
   Services,
+  extractAgentResponseText,
 } from '../types/index.js';
 
 const DEFAULT_MODEL = 'grok-4-1-fast';
@@ -265,7 +266,9 @@ export async function handleGrokExecuteCode(
     }
 
     // Detect if there were execution errors
-    const responseContent = response.content || '';
+    // API returns 'output' array containing tool calls and assistant messages
+    // Extract text from the assistant message in the output array
+    const responseContent = extractAgentResponseText(response.output) || response.content || '';
     const hasError = detectError(responseContent);
 
     // Build result object
