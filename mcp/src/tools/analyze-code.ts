@@ -31,6 +31,8 @@ export interface AnalyzeCodeInput {
   model?: string;
   /** Additional context about the code */
   context?: string;
+  /** Request timeout in milliseconds (default: 60000 for code analysis) */
+  timeout?: number;
 }
 
 /**
@@ -105,6 +107,13 @@ export const analyzeCodeSchema = {
     context: {
       type: 'string',
       description: 'Additional context about the code, such as its purpose or constraints',
+    },
+    timeout: {
+      type: 'integer',
+      description:
+        'Request timeout in milliseconds. Default: 60000 (60 seconds) for code analysis.',
+      minimum: 1000,
+      maximum: 120000,
     },
   },
   required: ['code'],
@@ -327,6 +336,15 @@ function validateSeverity(severity: unknown): CodeIssue['severity'] {
 // See P2-020: Consolidated cost calculation
 
 /**
+ * Default timeout for code analysis (60 seconds)
+ * Code analysis is inherently slower than simple queries due to:
+ * - Large code contexts
+ * - Comprehensive multi-category analysis
+ * - Structured JSON output generation
+ */
+const DEFAULT_ANALYSIS_TIMEOUT = 60000;
+
+/**
  * Execute code analysis
  */
 export async function executeAnalyzeCode(
@@ -348,7 +366,7 @@ export async function executeAnalyzeCode(
   // Build the prompt
   const prompt = buildAnalysisPrompt(input.code, language, analysisType, input.context);
 
-  // Make the API call
+  // Make the API call with extended timeout for code analysis
   const response = await client.chatCompletion({
     model,
     messages: [
@@ -364,6 +382,7 @@ export async function executeAnalyzeCode(
     ],
     temperature: 0.1, // Low temperature for consistent analysis
     max_tokens: 4000,
+    timeout: input.timeout ?? DEFAULT_ANALYSIS_TIMEOUT,
   });
 
   const responseTime = Date.now() - startTime;
@@ -497,6 +516,7 @@ export async function handleAnalyzeCode(
           : undefined,
       model: typeof params.model === 'string' ? params.model : undefined,
       context: typeof params.context === 'string' ? params.context : undefined,
+      timeout: typeof params.timeout === 'number' ? params.timeout : undefined,
     };
 
     // Resolve model for budget/rate estimation

@@ -22745,6 +22745,12 @@ var analyzeCodeSchema = {
     context: {
       type: "string",
       description: "Additional context about the code, such as its purpose or constraints"
+    },
+    timeout: {
+      type: "integer",
+      description: "Request timeout in milliseconds. Default: 60000 (60 seconds) for code analysis.",
+      minimum: 1e3,
+      maximum: 12e4
     }
   },
   required: ["code"],
@@ -22912,6 +22918,7 @@ function validateSeverity(severity) {
   }
   return "medium";
 }
+var DEFAULT_ANALYSIS_TIMEOUT = 6e4;
 async function executeAnalyzeCode(client, input) {
   const startTime = Date.now();
   if (!input.code || input.code.trim().length === 0) {
@@ -22935,7 +22942,8 @@ async function executeAnalyzeCode(client, input) {
     ],
     temperature: 0.1,
     // Low temperature for consistent analysis
-    max_tokens: 4e3
+    max_tokens: 4e3,
+    timeout: input.timeout ?? DEFAULT_ANALYSIS_TIMEOUT
   });
   const responseTime = Date.now() - startTime;
   const responseContent = response.choices[0]?.message?.content;
@@ -23023,7 +23031,8 @@ async function handleAnalyzeCode(client, input, services) {
       language: typeof params.language === "string" ? params.language : void 0,
       analysis_type: typeof params.analysis_type === "string" ? params.analysis_type : void 0,
       model: typeof params.model === "string" ? params.model : void 0,
-      context: typeof params.context === "string" ? params.context : void 0
+      context: typeof params.context === "string" ? params.context : void 0,
+      timeout: typeof params.timeout === "number" ? params.timeout : void 0
     };
     const resolvedModel = client.resolveModel(analyzeInput.model || "grok-code-fast-1");
     const estimatedInputTokens = Math.ceil(
