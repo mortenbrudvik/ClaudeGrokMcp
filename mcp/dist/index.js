@@ -24433,6 +24433,214 @@ async function handleGrokStatus(services, input) {
   }
 }
 
+// src/tools/session-stats.ts
+var grokSessionStatsSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  properties: {
+    detail_level: {
+      type: "string",
+      enum: ["summary", "detailed", "full"],
+      description: "Level of detail: summary (default), detailed (per-model breakdown), or full (all metrics with timeline)"
+    },
+    format: {
+      type: "string",
+      enum: ["markdown", "json"],
+      description: "Output format: markdown (default, human-readable) or json (structured data)"
+    }
+  },
+  additionalProperties: false
+};
+var grokSessionStatsToolDefinition = {
+  name: "grok_session_stats",
+  description: "Get detailed session analytics including queries, tokens, cost, cache efficiency, and per-model breakdown.",
+  inputSchema: grokSessionStatsSchema
+};
+function formatDuration(ms) {
+  const totalSeconds = Math.floor(ms / 1e3);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor(totalSeconds % 3600 / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+function formatCost(costUsd) {
+  if (costUsd < 1e-4) {
+    return "$0.0000";
+  } else if (costUsd < 0.01) {
+    return `$${costUsd.toFixed(4)}`;
+  } else if (costUsd < 1) {
+    return `$${costUsd.toFixed(4)}`;
+  }
+  return `$${costUsd.toFixed(2)}`;
+}
+function executeGetSessionStats(services, input) {
+  const detailLevel = input.detail_level || "summary";
+  const costSummary = services.costTracker.getUsageSummary();
+  const sessionDurationMs = services.costTracker.getSessionDuration();
+  const sessionStartTime = services.costTracker.getSessionStartTime();
+  const cacheStats = services.cache.getStats();
+  const cacheHitRate = services.cache.getHitRate();
+  const durationSeconds = Math.floor(sessionDurationMs / 1e3);
+  const durationMinutes = durationSeconds / 60;
+  const totalTokens = costSummary.totalInputTokens + costSummary.totalOutputTokens;
+  const queriesPerMinute = durationMinutes > 0 ? costSummary.queryCount / durationMinutes : 0;
+  const tokensPerQuery = costSummary.queryCount > 0 ? totalTokens / costSummary.queryCount : 0;
+  const costPerQuery = costSummary.queryCount > 0 ? costSummary.totalCostUsd / costSummary.queryCount : 0;
+  const tokensSaved = Math.round(cacheStats.hits * tokensPerQuery);
+  const costSaved = cacheStats.hits * costPerQuery;
+  const response = {
+    session: {
+      started_at: sessionStartTime.toISOString(),
+      duration: formatDuration(sessionDurationMs),
+      duration_seconds: durationSeconds
+    },
+    totals: {
+      queries: costSummary.queryCount,
+      input_tokens: costSummary.totalInputTokens,
+      output_tokens: costSummary.totalOutputTokens,
+      total_tokens: totalTokens,
+      cost_usd: costSummary.totalCostUsd,
+      cost_formatted: formatCost(costSummary.totalCostUsd)
+    },
+    cache: {
+      hit_rate_percent: cacheHitRate,
+      hits: cacheStats.hits,
+      misses: cacheStats.misses,
+      tokens_saved: tokensSaved,
+      cost_saved_usd: costSaved
+    },
+    rates: {
+      queries_per_minute: Math.round(queriesPerMinute * 100) / 100,
+      tokens_per_query: Math.round(tokensPerQuery),
+      cost_per_query_usd: Math.round(costPerQuery * 1e4) / 1e4
+    }
+  };
+  if (detailLevel === "detailed" || detailLevel === "full") {
+    const byModel = {};
+    for (const [model, data] of Object.entries(costSummary.byModel)) {
+      const queryPercent = costSummary.queryCount > 0 ? data.queries / costSummary.queryCount * 100 : 0;
+      const costPercent = costSummary.totalCostUsd > 0 ? data.cost / costSummary.totalCostUsd * 100 : 0;
+      const inputRatio = totalTokens > 0 ? costSummary.totalInputTokens / totalTokens : 0.5;
+      const estimatedInput = Math.round(data.tokens * inputRatio);
+      const estimatedOutput = data.tokens - estimatedInput;
+      byModel[model] = {
+        queries: data.queries,
+        query_percent: Math.round(queryPercent * 10) / 10,
+        input_tokens: estimatedInput,
+        output_tokens: estimatedOutput,
+        total_tokens: data.tokens,
+        cost_usd: data.cost,
+        cost_formatted: formatCost(data.cost),
+        cost_percent: Math.round(costPercent * 10) / 10
+      };
+    }
+    response.by_model = byModel;
+  }
+  if (detailLevel === "full") {
+    const records = services.costTracker.getRecords();
+    const recentRecords = records.slice(-10).reverse();
+    response.timeline = {
+      recent_queries: recentRecords.map((record2) => ({
+        timestamp: new Date(record2.timestamp).toISOString(),
+        model: record2.model,
+        tokens: record2.inputTokens + record2.outputTokens,
+        cost_usd: record2.costUsd
+      }))
+    };
+  }
+  return response;
+}
+function formatSessionStatsMarkdown(response) {
+  const lines = [];
+  lines.push("## Session Statistics");
+  lines.push("");
+  lines.push("### Session");
+  lines.push(`- **Started:** ${response.session.started_at}`);
+  lines.push(`- **Duration:** ${response.session.duration}`);
+  lines.push("");
+  lines.push("### Totals");
+  lines.push(`- **Queries:** ${response.totals.queries}`);
+  lines.push(
+    `- **Total Tokens:** ${response.totals.total_tokens.toLocaleString()} (${response.totals.input_tokens.toLocaleString()} in / ${response.totals.output_tokens.toLocaleString()} out)`
+  );
+  lines.push(`- **Total Cost:** ${response.totals.cost_formatted}`);
+  lines.push("");
+  lines.push("### Cache Efficiency");
+  lines.push(`- **Hit Rate:** ${response.cache.hit_rate_percent}%`);
+  lines.push(`- **Hits / Misses:** ${response.cache.hits} / ${response.cache.misses}`);
+  if (response.cache.tokens_saved > 0) {
+    lines.push(
+      `- **Estimated Savings:** ~${response.cache.tokens_saved.toLocaleString()} tokens (~${formatCost(response.cache.cost_saved_usd)})`
+    );
+  }
+  lines.push("");
+  lines.push("### Rates");
+  lines.push(`- **Queries/min:** ${response.rates.queries_per_minute}`);
+  lines.push(`- **Tokens/query:** ${response.rates.tokens_per_query.toLocaleString()}`);
+  lines.push(`- **Cost/query:** ${formatCost(response.rates.cost_per_query_usd)}`);
+  if (response.by_model && Object.keys(response.by_model).length > 0) {
+    lines.push("");
+    lines.push("### Model Usage");
+    lines.push("");
+    lines.push("| Model | Queries | Tokens | Cost | % of Cost |");
+    lines.push("|-------|---------|--------|------|-----------|");
+    for (const [model, stats] of Object.entries(response.by_model)) {
+      lines.push(
+        `| ${model} | ${stats.queries} (${stats.query_percent}%) | ${stats.total_tokens.toLocaleString()} | ${stats.cost_formatted} | ${stats.cost_percent}% |`
+      );
+    }
+  }
+  if (response.timeline && response.timeline.recent_queries.length > 0) {
+    lines.push("");
+    lines.push("### Recent Activity");
+    lines.push("");
+    for (let i = 0; i < response.timeline.recent_queries.length; i++) {
+      const entry = response.timeline.recent_queries[i];
+      const time3 = new Date(entry.timestamp).toLocaleTimeString();
+      lines.push(
+        `${i + 1}. ${time3} - ${entry.model} - ${entry.tokens.toLocaleString()} tokens - ${formatCost(entry.cost_usd)}`
+      );
+    }
+  }
+  return lines.join("\n");
+}
+function formatSessionStatsJson(response) {
+  return JSON.stringify(response, null, 2);
+}
+async function handleGrokSessionStats(services, input) {
+  try {
+    if (!services) {
+      throw new Error("Services not available");
+    }
+    const params = input || {};
+    const statsInput = {
+      detail_level: ["summary", "detailed", "full"].includes(params.detail_level) ? params.detail_level : "summary",
+      format: ["markdown", "json"].includes(params.format) ? params.format : "markdown"
+    };
+    const result = executeGetSessionStats(services, statsInput);
+    const outputText = statsInput.format === "json" ? formatSessionStatsJson(result) : formatSessionStatsMarkdown(result);
+    const content = {
+      type: "text",
+      text: outputText
+    };
+    return {
+      content: [content],
+      isError: false
+    };
+  } catch (error2) {
+    const errorMessage = error2 instanceof Error ? error2.message : "Unknown error occurred";
+    return {
+      content: [{ type: "text", text: `Error getting session stats: ${errorMessage}` }],
+      isError: true
+    };
+  }
+}
+
 // src/tools/generate-image.ts
 var DEFAULT_MODEL2 = "grok-2-image-1212";
 var DEFAULT_N = 1;
@@ -25189,6 +25397,7 @@ var ALL_TOOLS = [
   grokExecuteCodeToolDefinition,
   grokWithFileToolDefinition,
   grokStatusToolDefinition,
+  grokSessionStatsToolDefinition,
   grokGenerateImageToolDefinition
 ];
 var TOOL_HANDLERS = {
@@ -25201,6 +25410,7 @@ var TOOL_HANDLERS = {
   grok_execute_code: ((client, args, services) => handleGrokExecuteCode(client, args, services)),
   grok_with_file: ((client, args, services) => handleGrokWithFile(client, args, services)),
   grok_status: ((_client, args, services) => handleGrokStatus(services, args)),
+  grok_session_stats: ((_client, args, services) => handleGrokSessionStats(services, args)),
   grok_generate_image: ((client, args, services) => handleGrokGenerateImage(client, args, services))
 };
 function initializeServices() {

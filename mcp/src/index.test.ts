@@ -30,8 +30,8 @@ describe('Grok MCP Server', () => {
   });
 
   describe('ALL_TOOLS', () => {
-    it('should export all 10 tools', () => {
-      expect(ALL_TOOLS).toHaveLength(10);
+    it('should export all 11 tools', () => {
+      expect(ALL_TOOLS).toHaveLength(11);
     });
 
     it('should include grok_query tool', () => {
@@ -94,6 +94,12 @@ describe('Grok MCP Server', () => {
       expect(tool?.description).toContain('image');
     });
 
+    it('should include grok_session_stats tool', () => {
+      const tool = ALL_TOOLS.find((t) => t.name === 'grok_session_stats');
+      expect(tool).toBeDefined();
+      expect(tool?.description).toContain('session');
+    });
+
     it('should have valid tool definitions with required fields', () => {
       for (const tool of ALL_TOOLS) {
         expect(tool.name).toBeDefined();
@@ -113,8 +119,8 @@ describe('Grok MCP Server', () => {
   });
 
   describe('TOOL_HANDLERS', () => {
-    it('should have handlers for all 10 tools', () => {
-      expect(Object.keys(TOOL_HANDLERS)).toHaveLength(10);
+    it('should have handlers for all 11 tools', () => {
+      expect(Object.keys(TOOL_HANDLERS)).toHaveLength(11);
     });
 
     it('should have handler for grok_query', () => {
@@ -165,6 +171,11 @@ describe('Grok MCP Server', () => {
     it('should have handler for grok_generate_image', () => {
       expect(TOOL_HANDLERS['grok_generate_image']).toBeDefined();
       expect(typeof TOOL_HANDLERS['grok_generate_image']).toBe('function');
+    });
+
+    it('should have handler for grok_session_stats', () => {
+      expect(TOOL_HANDLERS['grok_session_stats']).toBeDefined();
+      expect(typeof TOOL_HANDLERS['grok_session_stats']).toBe('function');
     });
 
     it('should have matching handlers for all tools in ALL_TOOLS', () => {

@@ -30,6 +30,10 @@ import { grokExecuteCodeToolDefinition, handleGrokExecuteCode } from './tools/ex
 import { grokWithFileToolDefinition, handleGrokWithFile } from './tools/with-file.js';
 import { grokStatusToolDefinition, handleGrokStatus } from './tools/status.js';
 import {
+  grokSessionStatsToolDefinition,
+  handleGrokSessionStats,
+} from './tools/session-stats.js';
+import {
   grokGenerateImageToolDefinition,
   handleGrokGenerateImage,
 } from './tools/generate-image.js';
@@ -82,6 +86,7 @@ export const ALL_TOOLS = [
   grokExecuteCodeToolDefinition,
   grokWithFileToolDefinition,
   grokStatusToolDefinition,
+  grokSessionStatsToolDefinition,
   grokGenerateImageToolDefinition,
 ];
 
@@ -119,6 +124,8 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
   grok_with_file: ((client, args, services) =>
     handleGrokWithFile(client, args, services)) as ToolHandler,
   grok_status: ((_client, args, services) => handleGrokStatus(services!, args)) as ToolHandler,
+  grok_session_stats: ((_client, args, services) =>
+    handleGrokSessionStats(services!, args)) as ToolHandler,
   grok_generate_image: ((client, args, services) =>
     handleGrokGenerateImage(client, args, services)) as ToolHandler,
 };
