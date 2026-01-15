@@ -20899,6 +20899,19 @@ var RATE_LIMITS = {
     requestsPerMinute: 1e4
   }
 };
+function extractAgentResponseText(output) {
+  if (!output || !Array.isArray(output) || output.length === 0) return "";
+  const lastItem = output[output.length - 1];
+  if (!lastItem || !("content" in lastItem)) return "";
+  const message = lastItem;
+  if (!message.content || !Array.isArray(message.content) || message.content.length === 0)
+    return "";
+  const firstContent = message.content[0];
+  if (firstContent && firstContent.text) {
+    return firstContent.text;
+  }
+  return message.content.filter((item) => item.text).map((item) => item.text).join("\n");
+}
 
 // src/client/xai-client.ts
 var DEFAULT_BASE_URL = "https://api.x.ai/v1";
@@ -21445,10 +21458,18 @@ var XAIClient = class _XAIClient {
    */
   async responsesCreate(params) {
     const resolvedModel = this.resolveModel(params.model);
-    const response = await this.request("POST", "/responses", {
-      ...params,
-      model: resolvedModel
-    });
+    const effectiveTimeout = SLOW_MODEL_TIMEOUT;
+    const response = await this.request(
+      "POST",
+      "/responses",
+      {
+        ...params,
+        model: resolvedModel
+      },
+      0,
+      // retryCount
+      effectiveTimeout
+    );
     return response;
   }
   /**
@@ -23643,8 +23664,9 @@ async function handleGrokSearchX(client, args, services) {
       services.rateLimiter.recordUsage(response.usage.total_tokens, 1e3);
       services.rateLimiter.clearBackoff();
     }
+    const responseContent = extractAgentResponseText(response.output) || response.content || "";
     const result = {
-      response: response.content,
+      response: responseContent,
       model: response.model,
       usage: response.usage,
       cost,
@@ -23849,7 +23871,7 @@ async function handleGrokExecuteCode(client, args, services) {
       services.rateLimiter.recordUsage(response.usage.total_tokens, estimatedTokens);
       services.rateLimiter.clearBackoff();
     }
-    const responseContent = response.content || "";
+    const responseContent = extractAgentResponseText(response.output) || response.content || "";
     const hasError = detectError(responseContent);
     const result = {
       response: responseContent,

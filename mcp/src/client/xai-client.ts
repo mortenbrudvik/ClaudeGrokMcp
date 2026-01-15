@@ -768,10 +768,9 @@ export class XAIClient {
     // Resolve model alias - grok-4-1-fast recommended for tool calling
     const resolvedModel = this.resolveModel(params.model);
 
-    // Agent Tools API can take longer - use extended timeout
-    // Minimum 60s for fast models, 90s for slow flagship models
-    const isSlowModel = resolvedModel === 'grok-4' || resolvedModel === 'grok-4-non-reasoning';
-    const effectiveTimeout = isSlowModel ? SLOW_MODEL_TIMEOUT : Math.max(this.timeout, 60000);
+    // Agent Tools API (search, code execution) can take longer than standard queries
+    // Use SLOW_MODEL_TIMEOUT (90s) for all agent tools operations
+    const effectiveTimeout = SLOW_MODEL_TIMEOUT;
 
     const response = await this.request<AgentToolsResponse>(
       'POST',

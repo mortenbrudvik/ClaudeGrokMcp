@@ -1,6 +1,6 @@
 {
   "name": "grok-mcp-server",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "MCP server for xAI Grok integration with Claude Code",
   "type": "module",
   "main": "dist/index.js",
